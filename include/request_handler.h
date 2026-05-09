@@ -1,6 +1,5 @@
-#ifndef THREAD_POOL_H
-#define THREAD_POOL_H
-
+#ifndef REQUEST_HANDLER_H
+#define REQUEST_HANDLER_H
 
 #include <router.h>
 

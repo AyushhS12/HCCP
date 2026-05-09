@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include <server.h>
 #include <router.h>
+#include <json.h>
 
-void handle_app(Request *req, Response *res);
+void handle_app(const Request *req, Response *res);
 int main()
 {
     Router *router = new_router();
@@ -14,9 +15,15 @@ int main()
     return 0;
 }
 
-void handle_app(Request *req, Response *res)
+void handle_app(const Request *req, Response *res)
 {
-    char *path = req->path;
-    printf("\nHandler Called from path : %s\n",path);
+    printf("\nHandler Called from path : %s\n",req->path);
+    res->status = OK;
+    Parser parser = create_parser(req->body);
+    printf("\nParser Created");
+    Object *obj = parse_json(&parser);
+    print_object(obj,1);
+    printf("\nJson Parsed");
+    send_text_response(res, "{\"message\":\"Hello World\"}");
     return;
 }

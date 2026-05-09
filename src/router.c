@@ -55,24 +55,27 @@ int route(Router *router, char *path, Handler handler)
     }
 }
 
-int match_path(Router *router, Request *req, Response *res)
+int match_path(Router *router,const Request *req, Response *res)
 {
-    printf("\nreq.path: %s\n",req->path);
-    for (size_t i = 0; i <= router->count; i++)
+    printf("\nreq.path: %s\n", req->path);
+    for (int i = 0; i < router->count; i++)
     {
         if (strcmp(router->routes[i].path, req->path) == 0)
         {
-            printf("\nRequest Arrived at %s\n",router->routes[i].path);
-            router->routes[i].handler(req,res);
+            printf("\nRequest Arrived at %s\n", router->routes[i].path);
+            router->routes[i].handler(req, res);
+
+            printf("After handler call\n");
             return 1;
         }
     }
     return -1;
 }
 
-void print_path(Router *router){
+void print_path(Router *router)
+{
     for (int i = 0; i < router->count; i++)
     {
-        printf("\nRoute: %s\n",router->routes[i].path);
+        printf("\nRoute: %s\n", router->routes[i].path);
     }
 }

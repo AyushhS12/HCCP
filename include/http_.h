@@ -51,11 +51,10 @@ enum StatusCode
 struct Request
 {
     char *path;
+    Header *headers;
     int header_count;
     Method method;
     char *body;
-    Header *headers;
-    Header (*get_header)(Request *req, char *key);
 };
 
 struct Response
@@ -64,10 +63,8 @@ struct Response
     char *body;
     int header_count;
     int header_cap;
-    int code;
-    StatusCode status;
     Header *headers;
-    Header (*get_header)(Request *req, char *key);
+    StatusCode status;
 };
 
 struct Header
@@ -76,7 +73,31 @@ struct Header
     char *value;
 };
 
+// Utility Method for Convertion between string mehtod and Method enum
 Method method_parser(char *method);
 const char *get_status_text(StatusCode code);
+
+// Setter for Response Headers
+int set_header(Response *res, Header header);
+// Getter for Request Headers
+const Header *get_header_request(const Request *req, const char *key);
+// Getter for Response Headers
+Header *get_header_response(Response *res, const char *key);
+
+// Parsing Request
+const Request *parse_request(char *buffer);
+// Serializing Response into string
+const char *serialize_response(Response *res);
+// Print Response struct
+void print_response(const Response *res);
+
+// Freeing Response
+void free_response(Response *res);
+
+// Freeing Request
+void free_request(const Request *req);
+
+// Sending Response
+int send_text_response(Response *res, const char *data);
 
 #endif
