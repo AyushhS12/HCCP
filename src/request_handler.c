@@ -75,7 +75,7 @@ void init_queue(SocketQueue *queue)
 DWORD WINAPI worker(void *args)
 {
     SocketQueue *queue = (SocketQueue *)args;
-    char buffer[1024];
+    char buffer[32000];
     for (;;)
     {
         SOCKET client_fd = queue->dequeue(queue);
@@ -88,7 +88,6 @@ DWORD WINAPI worker(void *args)
         buffer[bytes] = '\0';
 
         const Request *request = parse_request(buffer);
-        printf("\nFinished parsing req\n");
         Response response = {
             .header_cap = 4,
             .path = request->path,
@@ -116,7 +115,7 @@ DWORD WINAPI worker(void *args)
             printf("\nEmpty Response Body\n");
         }
         const char *res = serialize_response(&response);
-        print_response(&response);
+        // print_response(&response);
         printf("\nFinished serializing response\n");
         send(client_fd, res, strlen(res), 0);
         free_request(request);

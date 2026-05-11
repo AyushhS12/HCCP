@@ -5,6 +5,20 @@
 #include <stdlib.h>
 #include <json.h>
 
+#define PARSE(x) parse_json_for_real(x)
+
+char *parse_string_value(Parser *parser);
+Array *parse_array_value(Parser *parser);
+
+void check_type_and_assign_value(Array *arr, Parser *parser);
+void check_type_and_assign_value_for_object(Object *obj, char *key, Parser *parser);
+
+void free_object(Object *obj);
+void free_array(Array *arr);
+
+void print_array(Array *arr, int indent);
+void print_object(Object *obj, int indent);
+
 enum Type
 {
     INTEGER,
@@ -95,7 +109,7 @@ Object *create_object()
     obj->count = 0;
     return obj;
 }
-
+// OLD API
 Object *parse_json(Parser *parser)
 {
     Object *obj = create_object();
@@ -153,7 +167,6 @@ Object *parse_json(Parser *parser)
                 value = &parser->input[parser->pos];
                 Object *inner = parse_json(parser);
                 printf("\nAnother object Parsed\n");
-                // print_object(inner, 1);
             }
         }
 
@@ -168,43 +181,452 @@ Object *parse_json(Parser *parser)
     return obj;
 }
 
-Object *parser_json_for_real(Parser *parser)
+void skip_whitespace(Parser *parser)
 {
-    Object *obj = create_object();
-    int level = 0;
-    while (parser->input[parser->pos] != '\0')
+    while (isspace(parser->input[parser->pos]))
     {
-        if (parser->input[parser->pos] == '{')
+        parser->pos++;
+    }
+}
+
+// NEW PARSING LOGIC
+Object *parse_json_for_real(Parser *parser)
+{
+    if (parser->input[parser->pos] == '{')
+    {
+        parser->pos++;
+    }
+    Object *obj = create_object();
+    while (parser->input[parser->pos] != '}' && parser->input[parser->pos] != '\0')
+    {
+        skip_whitespace(parser);
+        if (parser->input[parser->pos] == '}')
         {
-            level++;
             parser->pos++;
+            break;
         }
-        while (parser->input[parser->pos] == '\n' || parser->input[parser->pos] == '\r' || parser->input[parser->pos] == '\t' || parser->input[parser->pos] == ' ')
+        if (parser->input[parser->pos] == ',')
         {
             parser->pos++;
-        }
-        if (parser->input[parser->pos] == '"')
-        {
-            parser->pos++;
-            char *key = &parser->input[parser->pos];
-            while (parser->input[parser->pos] != '"')
+            while (isspace(parser->input[parser->pos]))
             {
                 parser->pos++;
             }
-            if (parser->input[parser->pos] == '"')
+        }
+        char *key;
+        if (parser->input[parser->pos] == '"')
+        {
+            key = parse_string_value(parser);
+            if (!key)
             {
-                parser->input[parser->pos] = '\0';
-                parser->pos++;
-            } else {
                 free_object(obj);
                 return NULL;
             }
-            // TODO: create entry and insert the key;
         }
-        if(parser->input[parser->pos] == ':'){
-            
+        if (parser->input[parser->pos] == ':')
+        {
+            // Parsing value
+            if (parser->input[parser->pos] == ',')
+            {
+                printf("\n------------------Invalid json data------------------\n");
+                free_object(obj);
+                free(key);
+                return NULL;
+            }
+            parser->pos++;
+            skip_whitespace(parser);
+            if (parser->input[parser->pos] == '"')
+            {
+                char *value = parse_string_value(parser);
+                if (!value)
+                {
+                    printf("\nInvalid Value");
+                    free(key);
+                    free(value);
+                    free_object(obj);
+                    return NULL;
+                }
+                Entry entry = create_entry(key, (Data){.string = value}, STRING);
+                if (object_insert(obj, entry) < 0)
+                {
+                    free(entry.key);
+                    free(value);
+                    free_object(obj);
+                    return NULL;
+                };
+            }
+            else if (parser->input[parser->pos] == '{')
+            {
+                Object *inner = parse_json_for_real(parser);
+                if (!inner)
+                {
+                    free(key);
+                    free_object(obj);
+                    return NULL;
+                }
+                Entry entry = create_entry(key, (Data){.obj = inner}, OBJECT);
+                if (object_insert(obj, entry) < 0)
+                {
+                    free(entry.key);
+                    free_object(inner);
+                    free_object(obj);
+                    return NULL;
+                };
+            }
+            else if (parser->input[parser->pos] == '[')
+            {
+                Array *arr = parse_array_value(parser);
+                if (!arr)
+                {
+                    printf("\nreached Here 1\n");
+                    return NULL;
+                }
+                Entry entry = create_entry(key, (Data){.array = arr}, ARRAY);
+                if (object_insert(obj, entry) < 0)
+                {
+                    free(entry.key);
+                    free_array(arr);
+                    free_object(obj);
+                    return NULL;
+                };
+            }
+            else
+            {
+                check_type_and_assign_value_for_object(obj, key, parser);
+            }
+        }
+        else
+        {
+            printf("\n corrupt json \n");
+            free_object(obj);
+            return NULL;
         }
     }
+    if (parser->input[parser->pos] == '}')
+    {
+        parser->pos++;
+    }
+    return obj;
+}
+
+char *parse_string_value(Parser *parser)
+{
+    parser->pos++;
+    char *start = &parser->input[parser->pos];
+    int len = 0;
+    while (start[len] != '"' && start[len] != '\0')
+    {
+        len++;
+    }
+    if (start[len] == '\0')
+        return NULL;
+    char *out = malloc(len + 1);
+    memcpy(out, start, len);
+    out[len] = '\0';
+    parser->pos += len + 1;
+    return out;
+}
+
+Array *parse_array_value(Parser *parser)
+{
+    Array *arr = create_array();
+    parser->pos++;
+    while (parser->input[parser->pos] != ']')
+    {
+        if (parser->input[parser->pos] == '\0')
+        {
+            free_array(arr);
+            printf("\n%s\n", &parser->input[parser->pos]);
+            printf("\ninvalid string\n");
+            return NULL;
+        }
+        switch (parser->input[parser->pos])
+        {
+        case '"':
+        {
+            char *value = parse_string_value(parser);
+            if (!value)
+            {
+                printf("\ninvalid string value\n");
+                free_array(arr);
+                return NULL;
+            }
+            if (array_push(arr, (Data){.string = value}, STRING) < 0)
+            {
+                printf("\ncannot push string value\n");
+                free_array(arr);
+                return NULL;
+            };
+            break;
+        }
+        case '[':
+        {
+
+            Array *new = parse_array_value(parser);
+            if (!new)
+            {
+                printf("\ncannot create new array value\n");
+                free_array(arr);
+                return NULL;
+            }
+            if (array_push(arr, (Data){.array = new}, ARRAY) < 0)
+            {
+                printf("\ncannot push new array value\n");
+                free_array(new);
+                free_array(arr);
+                return NULL;
+            };
+            break;
+        }
+        case '{':
+        {
+
+            Object *obj = PARSE(parser);
+            if (!obj)
+            {
+                printf("\ncannot create new object value\n");
+                free_array(arr);
+                return NULL;
+            }
+            if (array_push(arr, (Data){.obj = obj}, OBJECT) < 0)
+            {
+                printf("\ncannot push new object value\n");
+                free_object(obj);
+                free_array(arr);
+                return NULL;
+            };
+            break;
+        }
+        case ' ':
+        case '\t':
+        case '\n':
+        case '\r':
+            while (isspace(parser->input[parser->pos]))
+                parser->pos++;
+            break;
+        case ',':
+            parser->pos++;
+            while (isspace(parser->input[parser->pos]))
+                parser->pos++;
+            if (parser->input[parser->pos] == ']')
+            {
+                printf("\ninvalid array value\n");
+                free_array(arr);
+                return NULL;
+            }
+            break;
+        default:
+            check_type_and_assign_value(arr, parser);
+            break;
+        }
+    }
+    if (parser->input[parser->pos] == ']')
+    {
+        parser->pos++;
+        return arr;
+    }
+    return NULL;
+}
+
+void check_type_and_assign_value_for_object(Object *obj, char *key, Parser *parser)
+{
+    if (!obj || !parser || !key)
+        return;
+
+    char *start = &parser->input[parser->pos];
+
+    // move until primitive ends
+    while (
+        parser->input[parser->pos] != ',' &&
+        parser->input[parser->pos] != '}' &&
+        parser->input[parser->pos] != '\0' &&
+        !isspace(parser->input[parser->pos]))
+    {
+        parser->pos++;
+    }
+
+    char current = parser->input[parser->pos];
+    parser->input[parser->pos] = '\0';
+
+    char *value = start;
+
+    // boolean
+    if (strcmp(value, "true") == 0)
+    {
+        Entry entry = create_entry(key, (Data){.bool = 1}, BOOLEAN);
+        object_insert(obj, entry);
+    }
+    else if (strcmp(value, "false") == 0)
+    {
+        Entry entry = create_entry(key, (Data){.bool = 0}, BOOLEAN);
+        object_insert(obj, entry);
+    }
+    // null
+    else if (strcmp(value, "null") == 0)
+    {
+        Entry entry = create_entry(key, (Data){0}, TYPE_NULL);
+        object_insert(obj, entry);
+    }
+    else
+    {
+        int has_dot = 0;
+        int start_idx = 0;
+        int is_number = 1;
+
+        if (value[0] == '-')
+        {
+            start_idx = 1;
+        }
+
+        for (int i = start_idx; value[i] != '\0'; i++)
+        {
+            if (value[i] == '.')
+            {
+                if (has_dot)
+                {
+                    is_number = 0;
+                    break;
+                }
+                has_dot = 1;
+            }
+            else if (!isdigit((unsigned char)value[i]))
+            {
+                is_number = 0;
+                break;
+            }
+        }
+
+        if (is_number)
+        {
+            if (has_dot)
+            {
+                Entry entry = create_entry(
+                    key,
+                    (Data){.fl = strtod(value, NULL)},
+                    FLOAT);
+                object_insert(obj, entry);
+            }
+            else
+            {
+                Entry entry = create_entry(
+                    key,
+                    (Data){.in = strtoll(value, NULL, 10)},
+                    INTEGER);
+                object_insert(obj, entry);
+            }
+        }
+        else
+        {
+            printf("Invalid primitive value: %s\n", value);
+        }
+    }
+    // restore delimiter
+    parser->input[parser->pos] = current;
+}
+
+void check_type_and_assign_value(Array *arr, Parser *parser)
+{
+    if (!arr || !parser)
+        return;
+
+    char *start = &parser->input[parser->pos];
+
+    // move until primitive ends
+    while (
+        parser->input[parser->pos] != ',' &&
+        parser->input[parser->pos] != ']' &&
+        parser->input[parser->pos] != '\0' &&
+        !isspace(parser->input[parser->pos]))
+    {
+        parser->pos++;
+    }
+
+    char current = parser->input[parser->pos];
+    parser->input[parser->pos] = '\0';
+
+    char *value = start;
+
+    // boolean
+    if (strcmp(value, "true") == 0)
+    {
+        array_push(arr, (Data){.bool = 1}, BOOLEAN);
+    }
+    else if (strcmp(value, "false") == 0)
+    {
+        array_push(arr, (Data){.bool = 0}, BOOLEAN);
+    }
+
+    // null
+    else if (strcmp(value, "null") == 0)
+    {
+        array_push(arr, (Data){0}, TYPE_NULL);
+    }
+
+    else
+    {
+        int has_dot = 0;
+        int start_idx = 0;
+        int is_number = 1;
+
+        if (value[0] == '-')
+        {
+            start_idx = 1;
+        }
+
+        for (int i = start_idx; value[i] != '\0'; i++)
+        {
+            if (value[i] == '.')
+            {
+                if (has_dot)
+                {
+                    is_number = 0;
+                    break;
+                }
+                has_dot = 1;
+            }
+            else if (!isdigit((unsigned char)value[i]))
+            {
+                is_number = 0;
+                break;
+            }
+        }
+
+        if (is_number)
+        {
+            if (has_dot)
+            {
+                array_push(
+                    arr,
+                    (Data){.fl = strtod(value, NULL)},
+                    FLOAT);
+            }
+            else
+            {
+                array_push(
+                    arr,
+                    (Data){.in = strtoll(value, NULL, 10)},
+                    INTEGER);
+            }
+        }
+        else
+        {
+            printf("Invalid primitive value: %s\n", value);
+        }
+    }
+
+    // restore delimiter
+    parser->input[parser->pos] = current;
+
+    // if current char is ] after this , let the outer or parent consume it
+}
+
+Entry create_entry(char *key, Data data, Type type)
+{
+    Entry entry;
+    entry.data = data;
+    entry.type = type;
+    entry.key = key;
+    return entry;
 }
 
 int object_insert(Object *obj, Entry entry)
@@ -315,109 +737,6 @@ void free_array(Array *arr)
     free(arr);
 }
 
-Entry *create_entry_from_value(const char *key, const char *value)
-{
-    if (!key || !value)
-        return NULL;
-
-    Entry *entry = malloc(sizeof(Entry));
-    if (!entry)
-        return NULL;
-
-    entry->key = strdup(key);
-    if (!entry->key)
-    {
-        free(entry);
-        return NULL;
-    }
-
-    // -------- Type Detection --------
-    Type type = STRING;
-
-    if (strcmp(value, "true") == 0 || strcmp(value, "false") == 0)
-    {
-        type = BOOLEAN;
-    }
-    else if (strcmp(value, "null") == 0)
-    {
-        type = TYPE_NULL;
-    }
-    else
-    {
-        int has_dot = 0;
-        int start = 0;
-        int is_number = 1;
-
-        if (value[0] == '-')
-        {
-            start = 1;
-        }
-
-        for (int i = start; value[i] != '\0'; i++)
-        {
-            if (value[i] == '.')
-            {
-                if (has_dot)
-                {
-                    is_number = 0;
-                    break;
-                }
-                has_dot = 1;
-            }
-            else if (!isdigit((unsigned char)value[i]))
-            {
-                is_number = 0;
-                break;
-            }
-        }
-
-        if (is_number)
-        {
-            type = has_dot ? FLOAT : INTEGER;
-        }
-    }
-
-    entry->type = type;
-
-    // -------- Data Conversion --------
-    switch (type)
-    {
-    case INTEGER:
-        entry->data.in = strtoll(value, NULL, 10);
-        break;
-
-    case FLOAT:
-        entry->data.fl = strtod(value, NULL);
-        break;
-
-    case BOOLEAN:
-        entry->data.bool = (strcmp(value, "true") == 0);
-        break;
-
-    case TYPE_NULL:
-        break;
-
-    case STRING:
-    {
-        entry->data.string = strdup(value);
-        if (!entry->data.string)
-        {
-            free(entry->key);
-            free(entry);
-            return NULL;
-        }
-        break;
-    }
-
-    default:
-        free(entry->key);
-        free(entry);
-        return NULL;
-    }
-
-    return entry;
-}
-
 void print_indent(int indent)
 {
     for (int i = 0; i < indent; i++)
@@ -452,7 +771,7 @@ void print_object(Object *obj, int indent)
             break;
 
         case FLOAT:
-            printf("%f", entry->data.fl);
+            printf("%g", entry->data.fl);
             break;
 
         case STRING:
@@ -515,7 +834,7 @@ void print_array(Array *arr, int indent)
             break;
 
         case FLOAT:
-            printf("%f", value->item.fl);
+            printf("%g", value->item.fl);
             break;
 
         case STRING:

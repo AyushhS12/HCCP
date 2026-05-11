@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <server.h>
 #include <router.h>
 #include <json.h>
@@ -19,11 +20,13 @@ void handle_app(const Request *req, Response *res)
 {
     printf("\nHandler Called from path : %s\n",req->path);
     res->status = OK;
+    // Parser parser = create_parser(req->body);
     Parser parser = create_parser(req->body);
-    printf("\nParser Created");
-    Object *obj = parse_json(&parser);
+    printf("\n-----------Parser Created------------\n");
+    Object *obj = parse_json_for_real(&parser);
     print_object(obj,1);
-    printf("\nJson Parsed");
+    printf("\n--------------------Json Parsed--------------------\n");
     send_text_response(res, "{\"message\":\"Hello World\"}");
+    // free(parser.input);
     return;
 }

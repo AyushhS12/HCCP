@@ -462,7 +462,6 @@ int send_text_response(Response *res, const char *data)
         printf("\nSet Header failed, Content-type\n");
         return -1;
     };
-    printf("\nSet Header Content-Type in Response\n");
     int len = strlen(res->body);
     char length[20];
     sprintf(length, "%d", len);

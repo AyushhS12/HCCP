@@ -18,6 +18,7 @@ typedef struct Json Json;
 Parser create_parser(char *input);
 
 Object *parse_json(Parser *parser);
+Object *parse_json_for_real(Parser *parser);
 
 // Create a Json Array
 Array *create_array();
@@ -30,4 +31,7 @@ Object *create_object();
 int object_insert(Object *obj, Entry entry);
 
 void print_object(Object *obj, int indent);
+// Create a new key value pair Entry
+Entry create_entry(char *key, Data data, Type type);
+
 #endif

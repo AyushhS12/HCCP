@@ -64,8 +64,6 @@ int match_path(Router *router,const Request *req, Response *res)
         {
             printf("\nRequest Arrived at %s\n", router->routes[i].path);
             router->routes[i].handler(req, res);
-
-            printf("After handler call\n");
             return 1;
         }
     }
